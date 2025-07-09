@@ -12,10 +12,8 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "public" { 
   vpc_id                  = aws_vpc.main.id 
   cidr_block              = var.public_subnet_cidr_block 
-  map_public_ip_on_launch = true # Para que las instancias obtengan 
-una IP pública 
-  availability_zone       = "${var.aws_region}a" # Puedes usar una 
-zona de disponibilidad específica 
+  map_public_ip_on_launch = true # Para que las instancias obtengan una IP pública 
+  availability_zone       = "${var.aws_region}a" # Puedes usar una zona de disponibilidad específica 
  
   tags = { 
     Name = "${var.project_name}-PublicSubnet" 
@@ -96,8 +94,7 @@ resource "aws_security_group" "frontend_sg" {
   } 
 } 
  
-# Grupo de Seguridad para el Backend (permitir tráfico desde el 
-frontend y SSH) 
+# Grupo de Seguridad para el Backend (permitir tráfico desde el frontend y SSH) 
 resource "aws_security_group" "backend_sg" { 
   name        = "${var.project_name}-Backend-SG" 
   description = "Permitir tráfico desde el frontend y SSH al backend" 
@@ -108,18 +105,15 @@ resource "aws_security_group" "backend_sg" {
     from_port   = 22 
     to_port     = 22 
     protocol    = "tcp" 
-    cidr_blocks = ["0.0.0.0/0"] # Considerar restringir esto a tu IP o 
-VPN 
+    cidr_blocks = ["0.0.0.0/0"] # Considerar restringir esto a tu IP o VPN 
   } 
  
   ingress { 
     description     = "Tráfico de aplicación desde el frontend" 
-    from_port       = 3000 # O el puerto que use tu backend (ej. 3000, 
-8080, 5000) 
+    from_port       = 3000 # O el puerto que use tu backend (ej. 3000, 8080, 5000) 
     to_port         = 3000 
     protocol        = "tcp" 
-    security_groups = [aws_security_group.frontend_sg.id] # Solo desde 
-el SG del frontend 
+    security_groups = [aws_security_group.frontend_sg.id] # Solo desde el SG del frontend 
   } 
  
   # Regla de egreso (salida) para permitir todo el tráfico saliente 
@@ -140,11 +134,9 @@ resource "aws_instance" "frontend_instance" {
   instance_type = var.instance_type_frontend 
   subnet_id     = aws_subnet.public.id 
   vpc_security_group_ids = [aws_security_group.frontend_sg.id] 
-  key_name      = var.key_pair_name # Asegúrate que este Key Pair 
-existe en AWS 
+  key_name      = var.key_pair_name # Asegúrate que este Key Pair existe en AWS 
  
-  # Opcional: Script para instalar dependencias o desplegar el 
-frontend 
+  # Opcional: Script para instalar dependencias o desplegar el frontend 
   user_data = <<-EOF 
               #!/bin/bash 
               sudo apt update -y 
@@ -166,8 +158,7 @@ frontend
 resource "aws_instance" "backend_instance" { 
   ami           = var.ami_id 
   instance_type = var.instance_type_backend 
-  subnet_id     = aws_subnet.public.id # Si tu backend necesita ser 
-accesible desde internet (ej. para APIs públicas) 
+  subnet_id     = aws_subnet.public.id # Si tu backend necesita ser accesible desde internet (ej. para APIs públicas) 
   vpc_security_group_ids = [aws_security_group.backend_sg.id] 
   key_name      = var.key_pair_name # Asegúrate que este Key Pair 
 
