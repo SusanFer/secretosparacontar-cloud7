@@ -94,40 +94,6 @@ resource "aws_security_group" "frontend_sg" {
   } 
 } 
  
-# Grupo de Seguridad para el Backend (permitir tráfico desde el frontend y SSH) 
-resource "aws_security_group" "backend_sg" { 
-  name        = "${var.project_name}-Backend-SG" 
-  description = "Permitir tráfico desde el frontend y SSH al backend" 
-  vpc_id      = aws_vpc.main.id 
- 
-  ingress { 
-    description = "SSH desde cualquier lugar" 
-    from_port   = 22 
-    to_port     = 22 
-    protocol    = "tcp" 
-    cidr_blocks = ["0.0.0.0/0"] # Considerar restringir esto a tu IP o VPN 
-  } 
- 
-  ingress { 
-    description     = "Tráfico de aplicación desde el frontend" 
-    from_port       = 3000 # O el puerto que use tu backend (ej. 3000, 8080, 5000) 
-    to_port         = 3000 
-    protocol        = "tcp" 
-    security_groups = [aws_security_group.frontend_sg.id] # Solo desde el SG del frontend 
-  } 
- 
-  # Regla de egreso (salida) para permitir todo el tráfico saliente 
-  egress { 
-    from_port   = 0 
-    to_port     = 0 
-    protocol    = "-1" 
-    cidr_blocks = ["0.0.0.0/0"] 
-  } 
- 
-  tags = { 
-    Name = "${var.project_name}-Backend-SG" 
-  } 
-} 
 # --- Instancia EC2 para el Frontend --- 
 resource "aws_instance" "frontend_instance" { 
   ami           = var.ami_id 
@@ -137,16 +103,90 @@ resource "aws_instance" "frontend_instance" {
   key_name      = var.key_pair_name # Asegúrate que este Key Pair existe en AWS 
  
   # Opcional: Script para instalar dependencias o desplegar el frontend 
-  user_data = <<-EOF 
-              #!/bin/bash 
-              sudo apt update -y 
-              sudo apt install -y nginx 
-              sudo apt install -y nodejs npm              
-              git clone https://github.com/SusanFer/Secretos-para-contar-frontend.git
-              cd Secretos-para-contar-frontend
-              npm install
-              nohup npm run dev > /dev/null 2>&1 &
-              EOF 
+  user_data = <<-EOF
+    #!/bin/bash
+    sudo yum update -y
+    sudo yum install -y git # Nginx y Node/NPM se instalarán después
+
+    # Instalar NVM (Node Version Manager) y Node.js/npm
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    . ~/.nvm/nvm.sh
+    nvm install --lts # Instala la última versión LTS de Node.js
+    nvm use --lts
+
+    # Clonar el repositorio del frontend
+    git clone https://github.com/SusanFer/Secretos-para-contar-frontend.git /home/ec2-user/Secretos-para-contar-frontend
+
+    # Navegar al directorio y construir la aplicación React
+    cd /home/ec2-user/Secretos-para-contar-frontend
+    npm install
+    npm run build # ¡IMPORTANTE! Compilar para producción
+
+    # Instalar y configurar Nginx
+    sudo yum install -y nginx
+    sudo systemctl start nginx
+    sudo systemctl enable nginx
+
+    # Limpiar el directorio HTML predeterminado de Nginx
+    sudo rm -rf /usr/share/nginx/html/*
+    # Copiar los archivos de la build de React al directorio de Nginx
+    sudo cp -r /home/ec2-user/Secretos-para-contar-frontend/build/* /usr/share/nginx/html/
+
+    # Configurar Nginx para servir la aplicación React (manejo de SPA routing)
+    sudo bash -c 'cat << EOT > /etc/nginx/nginx.conf
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log;
+    pid /run/nginx.pid;
+
+    include /usr/share/nginx/modules/*.conf;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log  /var/log/nginx/access.log  main;
+
+        sendfile            on;
+        tcp_nopush          on;
+        tcp_nodelay         on;
+        keepalive_timeout   65;
+        types_hash_max_size 2048;
+
+        include             /etc/nginx/mime.types;
+        default_type        application/octet-stream;
+
+        # Load modular configuration files from the default.d directory.
+        # include /etc/nginx/default.d/*.conf; # Removido para evitar conflictos
+
+        server {
+            listen       80 default_server;
+            listen       [::]:80 default_server;
+            server_name  _;
+            root         /usr/share/nginx/html;
+
+            location / {
+                try_files $uri $uri/ /index.html; # Esto es CRUCIAL para aplicaciones SPA (React Router)
+            }
+
+            error_page 404 /404.html;
+                location = /40x.html {
+            }
+
+            error_page 500 502 503 504 /50x.html;
+                location = /50x.html {
+            }
+        }
+    }
+    EOT'
+
+    sudo systemctl restart nginx
+    EOF
  
   tags = { 
     Name    = "${var.project_name}-FrontendInstance" 
@@ -154,27 +194,3 @@ resource "aws_instance" "frontend_instance" {
   } 
 } 
  
-# --- Instancia EC2 para el Backend --- 
-resource "aws_instance" "backend_instance" { 
-  ami           = var.ami_id 
-  instance_type = var.instance_type_backend 
-  subnet_id     = aws_subnet.public.id # Si tu backend necesita ser accesible desde internet (ej. para APIs públicas) 
-  vpc_security_group_ids = [aws_security_group.backend_sg.id] 
-  key_name      = var.key_pair_name # Asegúrate que este Key Pair 
-
-  user_data = <<-EOF 
-              #!/bin/bash
-              sudo apt update -y
-              sudo apt install -y nginx
-              sudo apt install -y nodejs npm
-              git clone https://github.com/SusanFer/Secretos-para-contar-frontend.git
-              cd Secretos-para-contar-frontend
-              npm install
-              nohup npm run dev > /dev/null 2>&1 &
-  EOF
- 
-  tags = { 
-    Name    = "${var.project_name}-BackendInstance" 
-    Purpose = "Backend" 
-  } 
-}
