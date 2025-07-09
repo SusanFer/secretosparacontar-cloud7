@@ -148,19 +148,12 @@ frontend
   user_data = <<-EOF 
               #!/bin/bash 
               sudo apt update -y 
-              sudo apt install -y nginx # Ejemplo: Instalar Nginx para 
-servir el frontend 
-              # Aquí puedes agregar comandos para clonar tu repo de 
-frontend, 
-              # instalar Node.js, npm, construir la app y configurar 
-Nginx. 
-              # Ejemplo: 
-              # git clone 
-https://github.com/tu_usuario/tu_frontend.git /var/www/html/ 
-              # cd /var/www/html/ 
-              # npm install && npm run build 
-              # sudo systemctl start nginx 
-              # sudo systemctl enable nginx 
+              sudo apt install -y nginx 
+              sudo apt install -y nodejs npm              
+              git clone https://github.com/SusanFer/Secretos-para-contar-frontend.git
+              cd Secretos-para-contar-frontend
+              npm install
+              nohup npm run dev > /dev/null 2>&1 &
               EOF 
  
   tags = { 
@@ -177,24 +170,17 @@ resource "aws_instance" "backend_instance" {
 accesible desde internet (ej. para APIs públicas) 
   vpc_security_group_ids = [aws_security_group.backend_sg.id] 
   key_name      = var.key_pair_name # Asegúrate que este Key Pair 
-existe en AWS 
- 
-  # Opcional: Script para instalar dependencias o desplegar el backend 
+
   user_data = <<-EOF 
-              #!/bin/bash 
-              sudo apt update -y 
-              sudo apt install -y openjdk-17-jdk # Ejemplo: Instalar 
-Java para una app Spring Boot 
-              # Aquí puedes agregar comandos para clonar tu repo de 
-backend, 
-              # instalar Docker, ejecutar contenedores, etc. 
-              # Ejemplo: 
-              # git clone https://github.com/tu_usuario/tu_backend.git 
-/opt/backend 
-              # cd /opt/backend 
-              # mvn clean install 
-              # java -jar target/tu-backend.jar & 
-              EOF 
+              #!/bin/bash
+              sudo apt update -y
+              sudo apt install -y nginx
+              sudo apt install -y nodejs npm
+              git clone https://github.com/SusanFer/Secretos-para-contar-frontend.git
+              cd Secretos-para-contar-frontend
+              npm install
+              nohup npm run dev > /dev/null 2>&1 &
+  EOF
  
   tags = { 
     Name    = "${var.project_name}-BackendInstance" 

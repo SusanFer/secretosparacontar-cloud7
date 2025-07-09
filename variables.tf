@@ -1,14 +1,13 @@
 variable "aws_region" { 
-description = "La región de AWS donde se desplegará la 
-infraestructura." 
+description = "Ohio"
 type = string        
-default = "us-east-1" # Puedes cambiarla a tu región preferida 
+default = "us-east-2" # Puedes cambiarla a tu región preferida 
 } 
  
 variable "project_name" { 
-  description = "Nombre del proyecto para etiquetar recursos." 
+  description = "Secretos para contar" 
   type        = string 
-  default     = "MiApp" 
+  default     = "secretos-para-contar-cloud7" 
 } 
  
 variable "vpc_cidr_block" { 
@@ -36,20 +35,13 @@ variable "instance_type_backend" {
 } 
  
 variable "ami_id" { 
-  description = "ID de la AMI (Amazon Machine Image) para las 
-instancias." 
+  description = "ID de la AMI (Amazon Machine Image) para las instancias." 
   type        = string 
-  # Puedes buscar la AMI más reciente para Ubuntu 22.04 LTS por 
-ejemplo 
-  # Visita https://cloud-images.ubuntu.com/locator/ec2/ para encontrar 
-una AMI 
-  default = "ami-053b0d53c2792add8" # Ejemplo para Ubuntu Server 22.04 
-LTS en us-east-1 (N. Virginia) 
+  default = "ami-0c803b171269e2d72" 
 } 
  
 variable "key_pair_name" { 
-  description = "Nombre del par de claves SSH existente en AWS." 
+  description = "Key pair para Cloud7 en AWS." 
   type        = string 
-  # Asegúrate de tener un par de claves SSH en AWS, por ejemplo, 
-"my-key-pair"
+  default = "Cloud7"
 }
