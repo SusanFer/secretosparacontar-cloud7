@@ -10,10 +10,10 @@ resource "aws_vpc" "main" {
  
 # --- Subred Pública --- 
 resource "aws_subnet" "public" { 
-  vpc_id                  = aws_vpc.main.id 
-  cidr_block              = var.public_subnet_cidr_block 
+  vpc_id                = aws_vpc.main.id 
+  cidr_block            = var.public_subnet_cidr_block 
   map_public_ip_on_launch = true # Para que las instancias obtengan una IP pública 
-  availability_zone       = "${var.aws_region}a" # Puedes usar una zona de disponibilidad específica 
+  availability_zone     = "${var.aws_region}a" # Puedes usar una zona de disponibilidad específica 
  
   tags = { 
     Name = "${var.project_name}-PublicSubnet" 
@@ -53,9 +53,9 @@ resource "aws_route_table_association" "public" {
  
 # Grupo de Seguridad para el Frontend (permitir tráfico web) 
 resource "aws_security_group" "frontend_sg" { 
-  name        = "${var.project_name}-Frontend-SG" 
-  description = "Permitir tráfico HTTP/HTTPS y SSH al frontend" 
-  vpc_id      = aws_vpc.main.id 
+  name          = "${var.project_name}-Frontend-SG" 
+  description   = "Permitir trafico HTTP HTTPS y SSH al frontend" 
+  vpc_id        = aws_vpc.main.id 
  
   ingress { 
     description = "SSH desde cualquier lugar" 
@@ -79,7 +79,7 @@ resource "aws_security_group" "frontend_sg" {
     to_port     = 443 
     protocol    = "tcp" 
     cidr_blocks = ["0.0.0.0/0"] 
-  } 
+  }
  
   # Regla de egreso (salida) para permitir todo el tráfico saliente 
   egress { 
@@ -94,103 +94,128 @@ resource "aws_security_group" "frontend_sg" {
   } 
 } 
  
-# --- Instancia EC2 para el Frontend --- 
-resource "aws_instance" "frontend_instance" { 
-  ami           = var.ami_id 
-  instance_type = var.instance_type_frontend 
-  subnet_id     = aws_subnet.public.id 
-  vpc_security_group_ids = [aws_security_group.frontend_sg.id] 
-  key_name      = var.key_pair_name # Asegúrate que este Key Pair existe en AWS 
- 
-  # Opcional: Script para instalar dependencias o desplegar el frontend 
-  user_data = <<-EOF
-    #!/bin/bash
-    sudo yum update -y
-    sudo yum install -y git # Nginx y Node/NPM se instalarán después
+# --- CloudWatch Log Group ---
+resource "aws_cloudwatch_log_group" "user_data_log_group" {
+  name              = "${var.project_name}-user-data"
+  retention_in_days = 7
 
-    # Instalar NVM (Node Version Manager) y Node.js/npm
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-    . ~/.nvm/nvm.sh
-    nvm install --lts # Instala la última versión LTS de Node.js
-    nvm use --lts
+  tags = {
+    Name = "${var.project_name}-UserDataLogGroup"
+  }
+}
 
-    # Clonar el repositorio del frontend
-    git clone https://github.com/SusanFer/Secretos-para-contar-frontend.git /home/ec2-user/Secretos-para-contar-frontend
+# --- IAM Role for CloudWatch Agent ---
+resource "aws_iam_role" "ec2_cloudwatch_role" {
+  name = "${var.project_name}-EC2-CloudWatch-Role"
 
-    # Navegar al directorio y construir la aplicación React
-    cd /home/ec2-user/Secretos-para-contar-frontend
-    npm install
-    npm run build # ¡IMPORTANTE! Compilar para producción
-
-    # Instalar y configurar Nginx
-    sudo yum install -y nginx
-    sudo systemctl start nginx
-    sudo systemctl enable nginx
-
-    # Limpiar el directorio HTML predeterminado de Nginx
-    sudo rm -rf /usr/share/nginx/html/*
-    # Copiar los archivos de la build de React al directorio de Nginx
-    sudo cp -r /home/ec2-user/Secretos-para-contar-frontend/build/* /usr/share/nginx/html/
-
-    # Configurar Nginx para servir la aplicación React (manejo de SPA routing)
-    sudo bash -c 'cat << EOT > /etc/nginx/nginx.conf
-    user nginx;
-    worker_processes auto;
-    error_log /var/log/nginx/error.log;
-    pid /run/nginx.pid;
-
-    include /usr/share/nginx/modules/*.conf;
-
-    events {
-        worker_connections 1024;
-    }
-
-    http {
-        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-                          '$status $body_bytes_sent "$http_referer" '
-                          '"$http_user_agent" "$http_x_forwarded_for"';
-
-        access_log  /var/log/nginx/access.log  main;
-
-        sendfile            on;
-        tcp_nopush          on;
-        tcp_nodelay         on;
-        keepalive_timeout   65;
-        types_hash_max_size 2048;
-
-        include             /etc/nginx/mime.types;
-        default_type        application/octet-stream;
-
-        # Load modular configuration files from the default.d directory.
-        # include /etc/nginx/default.d/*.conf; # Removido para evitar conflictos
-
-        server {
-            listen       80 default_server;
-            listen       [::]:80 default_server;
-            server_name  _;
-            root         /usr/share/nginx/html;
-
-            location / {
-                try_files $uri $uri/ /index.html; # Esto es CRUCIAL para aplicaciones SPA (React Router)
-            }
-
-            error_page 404 /404.html;
-                location = /40x.html {
-            }
-
-            error_page 500 502 503 504 /50x.html;
-                location = /50x.html {
-            }
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Effect    = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
         }
-    }
-    EOT'
+      },
+    ]
+  })
 
-    sudo systemctl restart nginx
-    EOF
- 
-  tags = { 
-    Name    = "${var.project_name}-FrontendInstance" 
-    Purpose = "Frontend" 
-  } 
-} 
- 
+  tags = {
+    Name = "${var.project_name}-EC2-CloudWatch-Role"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
+  role       = aws_iam_role.ec2_cloudwatch_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_iam_instance_profile" "ec2_cloudwatch_instance_profile" {
+  name = "${var.project_name}-EC2-CloudWatch-Profile"
+  role = aws_iam_role.ec2_cloudwatch_role.name
+}
+
+# --- Instancia EC2 para el Frontend ---
+resource "aws_instance" "frontend_instance" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type_frontend
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.frontend_sg.id]
+  key_name               = var.key_pair_name # Asegúrate que este Key Pair existe en AWS
+  iam_instance_profile   = aws_iam_instance_profile.ec2_cloudwatch_instance_profile.name
+
+  # user_data FINAL: Despliegue de Node.js con PM2 y Nginx como Proxy Inverso
+  user_data = <<-EOF
+#!/bin/bash
+set -ex
+
+# --- Variables ---
+APP_DIR="/opt/app"
+LOG_FILE="/var/log/user-data-final.log"
+
+# --- Logging ---
+exec > "$LOG_FILE" 2>&1
+
+echo "--- Iniciando script user_data (v6 - Proxy Inverso) ---"
+
+# --- Instalación de Paquetes ---
+yum update -y
+yum install -y git nginx
+
+# --- Instalación de Node.js ---
+curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+yum install -y nodejs
+
+# --- Instalación de PM2 (Process Manager) ---
+npm install pm2 -g
+
+# --- Clonación y Compilación de la Aplicación ---
+git clone https://github.com/SusanFer/Secretos-para-contar-frontend.git "$APP_DIR"
+cd "$APP_DIR"
+npm install
+npm run build
+
+# --- Iniciar la Aplicación con PM2 ---
+# El comando "npm start" ejecuta el servidor de producción de Remix
+pm2 start npm --name "remix-app" -- start
+
+# --- Configurar PM2 para que se inicie con el sistema ---
+# Esto genera un script de inicio y lo configura como un servicio
+# El usuario 'ec2-user' es el estándar en Amazon Linux
+pm2 startup systemd -u ec2-user --hp /home/ec2-user
+pm2 save
+
+# --- Configurar Nginx como Proxy Inverso ---
+# Esto redirige el tráfico del puerto 80 al puerto 3000 donde corre la app
+cat > /etc/nginx/conf.d/default.conf <<'EOT'
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_cache_bypass \$http_upgrade;
+    }
+}
+EOT
+
+# --- Reinicio de Nginx ---
+nginx -t
+systemctl enable nginx
+systemctl restart nginx
+
+echo "--- Script user_data finalizado con éxito: Aplicación corriendo con PM2 y Nginx --- "
+EOF
+
+  tags = {
+    Name    = "${var.project_name}-FrontendInstance"
+    Purpose = "Frontend"
+  }
+}
