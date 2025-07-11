@@ -28,12 +28,8 @@ variable "instance_type_frontend" {
   default     = "t2.micro" # Ajusta según tus necesidades 
 } 
  
-variable "instance_type_backend" { 
-  description = "Tipo de instancia EC2 para el backend." 
-  type        = string 
-  default     = "t2.micro" # Ajusta según tus necesidades 
-} 
- 
+
+
 variable "ami_id" { 
   description = "ID de la AMI (Amazon Machine Image) para las instancias." 
   type        = string 
